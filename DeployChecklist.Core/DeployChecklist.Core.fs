@@ -41,18 +41,14 @@ module CheckList =
 
     let avActionForPackage site package =
         match package with
-        | Waiting -> Some (Build site)
-        | Built -> Some (Deploy site)
-        | Deployed -> None
+        | Waiting -> [ Build site ]
+        | Built -> [ Deploy site ]
+        | Deployed -> []
 
-    let avActionsForCI (ci: CI): AvailableActions =
+    let avActionsForCI ci =
         let avRed = avActionForPackage Red ci.red
         let avBlue = avActionForPackage Blue ci.blue
-        match avRed, avBlue with
-        | Some r , Some b -> [ r ; b ]
-        | Some r , _ -> [ r ]
-        | _ , Some b -> [ b ]
-        | _ , _ -> []
+        List.concat [ avRed ; avBlue ]
 
     let avActions model =
         match model with

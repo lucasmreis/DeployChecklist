@@ -3,3 +3,12 @@
 
 #load "DeployChecklist.Core.fs"
 open DeployChecklist.Core
+
+let a = DeployChecklist.Core.CheckList.Pulled
+
+let b = DeployChecklist.Core.CheckList.update DeployChecklist.Core.CheckList.Push a
+
+printfn "%A" b
+
+// match b with
+// | x, y -> printfn x
