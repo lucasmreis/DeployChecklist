@@ -1,2 +1,7 @@
 .paket
+.fake
 packages
+build
+deploy
+**/obj/
+**/bin/
