@@ -13,6 +13,7 @@ let deployDir = "./deploy/"
 let appReferences  =
     !! "/**/*.csproj"
       ++ "/**/*.fsproj"
+      -- ".projekt/**/*.*"
 
 // version info
 let version = "0.1"  // or retrieve from CI server
@@ -30,8 +31,8 @@ Target "Build" (fun _ ->
 
 Target "RunTests" (fun _ ->
     trace "Running Tests..."
-    !! (buildDir + @"\*Tests.dll")
-      |> xUnit (fun p -> { p with HtmlOutputPath = Some (buildDir @@ "html") })
+    !! (buildDir + @"\*.Tests.dll")
+      |> xUnit (fun p -> { p with ToolPath = "./packages/xunit.runner.console/tools/xunit.console.exe" })
 )
 
 Target "Deploy" (fun _ ->
@@ -47,4 +48,4 @@ Target "Deploy" (fun _ ->
   ==> "Deploy"
 
 // start build
-RunTargetOrDefault "Build"
+RunTargetOrDefault "RunTests"

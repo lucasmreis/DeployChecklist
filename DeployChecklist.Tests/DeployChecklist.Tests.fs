@@ -1,10 +1,13 @@
 namespace DeployChecklist.Tests
 
 open Xunit
+open Swensen.Unquote
+open DeployChecklist.Core.CheckList
 
 module Tests =
 
     [<Fact>]
-    let ``Ola mundo!``() =
-      let a = 123
-      Assert.Equal(a, 123)
+    let ``Pull works``() =
+      let state = Initial
+      let expected = Pulled
+      fst (update Pull Initial) =! Some expected
