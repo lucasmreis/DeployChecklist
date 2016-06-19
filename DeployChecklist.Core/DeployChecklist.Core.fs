@@ -1,13 +1,15 @@
 namespace DeployChecklist.Core
 
 module CheckList =
-    // ACTIONS
+    open Chessie.ErrorHandling
+
+    // COMMANDS
 
     type Site =
         | Red
         | Blue
 
-    type Action =
+    type Command =
         | Pull
         | Test
         | Push
@@ -25,69 +27,125 @@ module CheckList =
         { red: Package
           blue: Package }
 
-    type Model =
+    type State =
         | Initial
         | Pulled
         | Tested
         | CI of CI
 
-    type AvailableActions = Action list
+    // AVAILABLE COMMANDS GIVEN STATE
 
-    type ActionResult = OK | Error
-
-    type UpdateResult = ActionResult * Model * AvailableActions
-
-    // AVAILABLE ACTIONS GIVEN MODEL
-
-    let avActionForPackage site package =
+    let avCommandsForPackage site package =
         match package with
         | Waiting -> [ Build site ]
         | Built -> [ Deploy site ]
         | Deployed -> []
 
-    let avActionsForCI ci =
-        let avRed = avActionForPackage Red ci.red
-        let avBlue = avActionForPackage Blue ci.blue
+    let avCommandsForCI ci =
+        let avRed = avCommandsForPackage Red ci.red
+        let avBlue = avCommandsForPackage Blue ci.blue
         List.concat [ avRed ; avBlue ]
 
-    let avActions model =
-        match model with
+    let avCommands state =
+        match state with
         | Initial -> [ Pull ]
         | Pulled -> [ Test ]
         | Tested -> [ Push ]
-        | CI ci -> avActionsForCI ci
+        | CI ci -> avCommandsForCI ci
 
-    // UPDATE
+    // EVENTS
 
-    let pull m = Pulled
+    type Event =
+        | CodePulled
+        | CodeTested
+        | CodePushed
+        | SiteBuilt of Site
+        | SiteDeployed of Site
 
-    let test m = Tested
+    type Error =
+        | AlreadyPulled
+        | ShouldBePulled
+        | ShouldBeTested
+        | NotWaiting of Site
+        | NotBuilt of Site
 
-    let push m = CI { red = Waiting ; blue = Waiting }
+    // EVOLVE
 
-    let toSiteState state site m =
-        match site with
-        | Red -> CI { m with red = state }
-        | Blue -> CI { m with blue = state }
+    let pull s =
+        match s with
+        | Initial -> [ CodePulled ] |> ok
+        | _ -> AlreadyPulled |> fail
 
-    let build = toSiteState Built
+    let test s =
+        match s with
+        | Pulled -> [ CodeTested ] |> ok
+        | _ -> ShouldBePulled |> fail
 
-    let deploy = toSiteState Deployed
+    let push s =
+        match s with
+        | Tested -> [ CodePushed ] |> ok
+        | _ -> ShouldBeTested |> fail
 
-    let unsafeUpdate action model =
-        match action, model with
-        | Pull , _ -> pull model
-        | Test , _ -> test model
-        | Push , _ -> push model
-        | Build site , CI ci -> build site ci
-        | Deploy site , CI ci -> deploy site ci
-        | _ , _ -> model // this should never happen
+    let build site s =
+        match site , s with
+        | Red , CI { red = Waiting } -> [ SiteBuilt Red ] |> ok
+        | Blue , CI { blue = Waiting } -> [ SiteBuilt Blue ] |> ok
+        | Red , _ -> NotWaiting Red |> fail
+        | Blue , _ -> NotWaiting Blue |> fail
 
-    let update action model =
-        let allowedActions = avActions model
-        let actionIsAllowed = List.contains action allowedActions
-        if actionIsAllowed then
-            let updated = unsafeUpdate action model
-            Some updated , (avActions updated)
-        else
-            None , allowedActions
+    let deploy site s =
+        match site , s with
+        | Red , CI { red = Built } -> [ SiteDeployed Red ] |> ok
+        | Blue , CI { blue = Built } -> [ SiteDeployed Blue ] |> ok
+        | Red , _ -> NotBuilt Red |> fail
+        | Blue , _ -> NotBuilt Blue |> fail
+
+    let execute command state =
+        match command with
+        | Pull -> pull state
+        | Test -> test state
+        | Push -> push state
+        | Build site -> build site state
+        | Deploy site -> deploy site state
+
+    let apply state event =
+        match event , state with
+        | CodePulled , Initial -> Pulled
+        | CodeTested , Pulled -> Tested
+        | CodePushed , Tested -> CI { red = Waiting ; blue = Waiting }
+        | SiteBuilt Red , CI { red = Waiting ; blue = b } -> CI { red = Built ; blue = b }
+        | SiteDeployed Red , CI { red = Built ; blue = b } -> CI { red = Deployed ; blue = b }
+        | SiteBuilt Blue , CI { blue = Waiting ; red = r } -> CI { blue = Built ; red = r }
+        | SiteDeployed Blue , CI { blue = Built ; red = r } -> CI { blue = Deployed ; red = r }
+        | _ , s -> s
+
+    let evolve command state =
+        match execute command state with
+        | Ok (events, _) ->
+            let newState = List.fold apply state events
+            (newState, events) |> ok
+        | Bad err -> Bad err
+
+
+    // // UPDATE
+
+    // let unsafeUpdate command state =
+    //     match command , state with
+    //     | Pull , Initial -> Some Pulled
+    //     | Test , Pulled -> Some Tested
+    //     | Push , Tested -> CI { red = Waiting ; blue = Waiting } |> Some
+    //     | Build Red , CI ci -> CI { ci with red = Built } |> Some
+    //     | Build Blue , CI ci -> CI { ci with blue = Built } |> Some
+    //     | Deploy Red , CI ci -> CI { ci with red = Deployed } |> Some
+    //     | Deploy Blue , CI ci -> CI { ci with blue = Deployed } |> Some
+    //     | _ , _ -> None
+
+
+    // let update command state =
+    //     let allowedCommands = avCommands state
+    //     if List.contains command allowedCommands then
+    //         match unsafeUpdate command state with
+    //         | Some state -> Some state , avCommands state
+    //         | None -> None, allowedCommands
+    //     else
+    //         None, allowedCommands

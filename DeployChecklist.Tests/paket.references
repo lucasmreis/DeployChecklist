@@ -1,2 +1,5 @@
 xUnit
 unquote
+chessie
+fscheck
+FsCheck.Xunit
